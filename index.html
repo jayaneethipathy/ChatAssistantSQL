@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Employee Chat Assistant</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body { padding: 20px; }
+        #chat-area { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+        .message { margin-bottom: 5px; } /* Space between messages */
+        .user-message { text-align: right; color: blue; } /* Align user messages to the right */
+        .assistant-message { text-align: left; color: green; } /* Align assistant messages to the left */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Employee Chat Assistant</h1>
+    <div id="chat-area"></div>
+    <input type="text" id="user-input" class="form-control">
+    <button onclick="sendMessage()" class="btn btn-primary">Send</button>
+
+    <script>
+        function sendMessage() {
+            const userInput = document.getElementById("user-input");
+            const message = userInput.value;
+
+            if (message.trim() === "") return; // Don't send empty messages
+
+            displayMessage("You: " + message, "user-message"); // Mark as user message
+            userInput.value = "";
+
+            fetch('/api/v1/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                displayMessage("Assistant: " + data.response, "assistant-message"); // Mark as assistant message
+
+                // Check if the response is an HTML table and render it
+                if (data.response.startsWith("<table")) {
+                    const chatArea = document.getElementById("chat-area");
+                    const tableDiv = document.createElement('div'); // Create a div for the table
+                    tableDiv.innerHTML = data.response;
+                    chatArea.appendChild(tableDiv);  // Append the table to the chat area
+                    chatArea.scrollTop = chatArea.scrollHeight; // Scroll to bottom
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                displayMessage("Assistant: An error occurred.", "assistant-message");
+            });
+        }
+
+        function displayMessage(message, messageClass) {
+            const chatArea = document.getElementById("chat-area");
+            const messageDiv = document.createElement('div'); // Create a div for the message
+            messageDiv.className = "message " + messageClass; // Add the message class
+            messageDiv.innerHTML = message;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight; // Scroll to the bottom
+        }
+
+        // Allow Enter key to send message
+        const userInput = document.getElementById("user-input");
+        userInput.addEventListener("keyup", function(event) {
+            if (event.keyCode === 13) { // 13 is the Enter key code
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
