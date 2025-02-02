@@ -1,10 +1,11 @@
+import os
 import sqlite3
 import spacy
 from flask import Flask, request, jsonify, render_template
 from datetime import datetime
 import logging
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+#from sentence_transformers import SentenceTransformer, util
 from dateutil.parser import parse, ParserError
 
 # Initialize Flask app
@@ -14,7 +15,7 @@ app = Flask(__name__)
 nlp = spacy.load("en_core_web_sm")
 
 # Load the Sentence Transformer model - currently not using
-sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+####sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -236,56 +237,117 @@ def detect_intent_and_entities(query):
             location = ent.text
             entities["location"] = location
 
-    # 3. Improved Intent Detection with Context and Dependencies
-    if "manager" in doc:
-        intent = "manager_query"
-        # Check for "of" or "in" to associate with a department
-        if department is None:
-            for token in doc:
-                if token.text in ["of", "in"] and token.head.text == "manager" and department: #token.head is the parent of the token
-                    break  # Department is already captured
-                elif token.text in ["of", "in"] and token.head.text == "manager" and not department:
-                    for child in token.children:
-                        if child.dep_ == "pobj" and child.ent_type_ == "ORG": #check if the child is an org and is a prepositional object
-                            department = child.text
-                            entities["department"] = department
-                            break
-        if not entities.get("department"): #if no department is found, return none
-            return None, None 
-    elif "salary" in doc or "total salary" in doc or "salary expense" in doc:
-            intent = "salary_query"
-    elif "hired" in doc and "after" in doc:
-        intent = "hired_after_query"
+    # Check for salary-related queries
+    if "salary" in doc:
+        intent = "salary_query"
+        for token in doc: #try to get department from the query
+            if token.dep_ == "prep" and token.head.text == "salary":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "ORG":
+                        entities["department"] = child.text
+                        break
+                break
+        if not entities.get("department"): #if there is no department, return none
+            return None, None
+    
+    elif "last name" in doc:
+        intent = "last_name_query"
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                entities["last_name"] = ent.text
+                break
+        if not entities.get("last_name"):
+            return None, None
+
+    elif "manager" in doc and "salary" in doc:
+        intent = "manager_salary_query"
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                entities["manager"] = ent.text
+                break
+        if not entities.get("manager"):
+            return None, None
+    elif "list" in doc and "employees" in doc or "show me all employees" in doc:
+        intent = "employee_query"
+        if "all" in doc:
+            pass #no need to filter by anything
     elif "employees" in doc or "employee" in doc:
         if "details" in doc or "information" in doc:
             intent = "employee_details_query"
         else:
             intent = "employee_query"
-    elif person_name and not intent:
-        intent = "employee_details_query"
-    elif department and "how many" in doc:
-        intent = "employee_count_query"
-    elif manager_name and "salary" in doc:
-        intent = "manager_salary_query"
-    elif last_name and "last name" in doc:
-        intent = "last_name_query"
+    elif "manager" in doc:
+        intent = "manager_query"
+        for token in doc:
+            if token.text in ["of", "in"] and token.head.text == "manager":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "ORG":
+                        entities["department"] = child.text
+                        break
+                break
+        if not entities.get("department"):
+            return None, None
 
+    elif "hired" in doc and "after" in doc:
+        intent = "hired_after_query"
+    elif "how many" in doc and "employees" in doc:
+        intent = "employee_count_query"
+        for token in doc: #try to get department from the query
+            if token.dep_ == "prep" and token.head.text == "employees":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "ORG":
+                        entities["department"] = child.text
+                        break
+                break
+    elif "manager" in doc and "salary" in doc:
+        intent = "manager_salary_query"
+        for token in doc: #try to get manager from the query
+            if token.dep_ == "prep" and token.head.text == "salary":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "PERSON":
+                        entities["manager"] = child.text
+                        break
+                break
+        if not entities.get("manager"): #if there is no manager, return none
+            return None, None
+    elif "last name" in doc:
+        intent = "last_name_query"
+        for token in doc: #try to get last name from the query
+            if token.dep_ == "dobj" and token.head.text == "name":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "PERSON":
+                        entities["last_name"] = child.text
+                        break
+                break
+        if not entities.get("last_name"): #if there is no last name, return none
+            return None, None
     elif "employees" in doc and "location" in doc:
         intent = "employees_by_location_query"
+        for token in doc: #try to get location from the query
+            if token.dep_ == "prep" and token.head.text == "employees":
+                for child in token.children:
+                    if child.dep_ == "pobj" and child.ent_type_ == "GPE":
+                        entities["location"] = child.text
+                        break
+                break
+        if not entities.get("location"): #if there is no location, return none
+            return None, None
+
     return intent, entities
 # Chat route for handling user requests
 @app.route('/api/v1/chat', methods=['POST'])
 def chat():
     data = request.get_json()
+    query = data.get("query")
     if not query:
         return jsonify({'response': "Please enter a valid query."}), 400
-
-    query = data.get("query")
+    print(query)
+    
 
     intent, entities = detect_intent_and_entities(query)  # Use the NLU function
     if intent == "greeting": # Handle the greeting intent
         return jsonify({'response': "Hello! How can I help you?"}), 200
-    if intent is None:
+    elif intent is None:
         return jsonify({'response': "I can't understand your intent request ."}), 400
 
     sql_query, params = generate_sql_query(intent, entities)
@@ -307,4 +369,5 @@ def index():
     return render_template("index.html")  # Serve an HTML page for the main interface
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=True)
