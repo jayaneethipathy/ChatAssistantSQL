@@ -1,0 +1,7 @@
+flask
+transformers
+torch
+pandas
+sqlite3
+huggingface_hub
+requests

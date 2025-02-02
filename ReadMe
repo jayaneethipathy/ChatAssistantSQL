@@ -1,0 +1,26 @@
+# Flask Employee Bot
+
+This is a simple Flask-based employee management chatbot that allows users to query employee details, department managers, and salary information.
+
+## Features
+- Retrieve employee details by name
+- Find the manager of a department
+- Get the total salary of employees in a department
+- Query employees hired after a certain date
+
+## Project Structure
+EmployeechatAI/ ├── app.py ├── requirements.txt ├── README.md ├── templates/ │ └── index.html └── static/ └── style.css
+
+
+## Setup Instructions
+
+### Prerequisites
+- Python 3.x installed
+- `pip` installed
+
+### Installation
+1. Clone this repository or download the files.
+2. Navigate to the project directory.
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
