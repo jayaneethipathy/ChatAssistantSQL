@@ -1,7 +1,6 @@
-flask
-transformers
-torch
+Flask
+spacy
 pandas
-sqlite3
-huggingface_hub
-requests
+python-dateutil
+sentence-transformers  
+gunicorn
